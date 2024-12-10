@@ -1,26 +1,63 @@
-# src/search.py
-from scipy.spatial.distance import cosine
+from typing import Tuple
 
-class SearchEngine:
-    def __init__(self, document_embeddings):
-        """
-        Initialize the search engine with precomputed document embeddings.
-        :param document_embeddings: Numpy array of document embeddings.
-        """
-        self.document_embeddings = document_embeddings
+import numpy as np
+from tqdm import tqdm
 
-    def search(self, query_embedding, top_k=10):
-        """
-        Search for the top-k documents based on cosine similarity.
-        :param query_embedding: Numpy array for the query embedding.
-        :param top_k: Number of top results to return.
-        :return: List of (document_index, similarity_score).
-        """
-        similarities = [
-            1 - cosine(query_embedding, doc_embedding)
-            for doc_embedding in self.document_embeddings
-        ]
-        ranked_results = sorted(
-            enumerate(similarities), key=lambda x: x[1], reverse=True
+
+def search(
+    doc_vectors: np.ndarray,
+    query_vectors: np.ndarray,
+    k: int,
+    batch_size: int = 1000,
+    load_bar: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    n_docs = doc_vectors.shape[0]
+    doc_split = np.array_split(np.arange(n_docs), np.ceil(n_docs / batch_size))
+    top_indices = []
+    top_sims = []
+    start_index = 0
+
+    if load_bar:
+        iterator = tqdm(
+            doc_split, total=len(doc_split), desc="Searching document batches"
         )
-        return ranked_results[:top_k]
+    else:
+        iterator = doc_split
+
+    for doc_indices in iterator:
+        doc_batch = doc_vectors[doc_indices]
+        if len(top_indices) * k >= batch_size:
+            top_indices = np.concatenate(top_indices, axis=0)
+            top_sims = np.concatenate(top_sims, axis=0)
+            top_k_index, top_sim = aggregate(top_indices, top_sims, k)
+            top_indices = [top_k_index]
+            top_sims = [top_sim]
+        sims = np.dot(doc_batch, query_vectors.T)
+
+        if sims.shape[0] > k:
+            intermed_index = np.argpartition(-sims, k, axis=0)[:k]
+        else:
+            intermed_index = np.argsort(-sims, axis=0)[:k]
+        top_sim = sims[intermed_index, np.arange(sims.shape[1])]
+        top_k_index = intermed_index + start_index
+        start_index += doc_batch.shape[0]
+
+        top_indices.append(top_k_index)
+        top_sims.append(top_sim)
+    else:
+        top_indices = np.concatenate(top_indices, axis=0)
+        top_sims = np.concatenate(top_sims, axis=0)
+        final_indices, final_sims = aggregate(top_indices, top_sims, k)
+
+    return final_indices, final_sims
+
+
+def aggregate(indices, sims, k):
+    if sims.shape[0] > k:
+        intermed_indices = np.argpartition(-sims, k, axis=0)[:k]
+    else:
+        intermed_indices = np.argsort(-sims, axis=0)[:k]
+    top_sims = sims[intermed_indices, np.arange(sims.shape[1])]
+    top_indices = indices[intermed_indices, np.arange(indices.shape[1])]
+    return top_indices, top_sims
