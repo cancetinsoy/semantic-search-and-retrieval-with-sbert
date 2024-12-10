@@ -3,3 +3,6 @@ __pycache__/
 .DS_Store
 .vscode/
 venv/
+
+# numpy files
+*.npy

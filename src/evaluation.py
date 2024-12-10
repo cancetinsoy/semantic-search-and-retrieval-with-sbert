@@ -1,22 +1,77 @@
-# src/evaluation.py
-def evaluate_precision_recall(results, ground_truth, k_values):
-    precision_at_k = {}
-    recall_at_k = {}
-    
+from typing import Dict, Mapping, Sequence, Union
+
+import numpy as np
+
+from .vector_database import VectorDatabase
+
+DocID = Union[int, str]
+QueryID = Union[int, str]
+
+
+def precision_at_k(
+    relevant_docs: Sequence[DocID], retrieved_docs: Sequence[DocID], k: int
+) -> float:
+    retrieved_k = retrieved_docs[:k]
+    relevant_retrieved = len(set(relevant_docs).intersection(set(retrieved_k)))
+    return relevant_retrieved / k
+
+
+def recall_at_k(
+    relevant_docs: Sequence[DocID], retrieved_docs: Sequence[DocID], k: int
+) -> float:
+    retrieved_k = retrieved_docs[:k]
+    relevant_retrieved = len(set(relevant_docs).intersection(set(retrieved_k)))
+    total_relevant = len(relevant_docs)
+    if total_relevant == 0:
+        return 0.0
+    return relevant_retrieved / total_relevant
+
+
+def evaluate_queries(
+    queries: Dict[QueryID, str],
+    query_results: Mapping[QueryID, Sequence[DocID]],
+    k_values: list[int],
+    database: VectorDatabase,
+    **search_kwargs
+) -> Dict[str, Dict[str, float]]:
+
+    query_ids = list(queries.keys())
+    query_texts = list(queries.values())
+
+    top_k_indices = database.search_queries(
+        query_texts, k=max(k_values), **search_kwargs
+    )
+
+    output = {}
     for k in k_values:
         precisions = []
         recalls = []
-        for query_id, retrieved_docs in results.items():
-            relevant_docs = set(ground_truth[query_id])
-            retrieved_at_k = [doc[0] for doc in retrieved_docs[:k]]
+        for i, query_id in enumerate(query_ids):
+            retrieved = top_k_indices[:k, i]
+            relevant = query_results[query_id]
+            precisions.append(precision_at_k(list(relevant), list(retrieved), k))
+            recalls.append(recall_at_k(list(relevant), list(retrieved), k))
+        precisions = np.mean(precisions)
+        recalls = np.mean(recalls)
 
-            precision = len(set(retrieved_at_k) & relevant_docs) / k
-            recall = len(set(retrieved_at_k) & relevant_docs) / len(relevant_docs)
+        output[k] = {"Precision": precisions, "Recall": recalls}
 
-            precisions.append(precision)
-            recalls.append(recall)
+    return output
 
-        precision_at_k[k] = sum(precisions) / len(precisions)
-        recall_at_k[k] = sum(recalls) / len(recalls)
 
-    return precision_at_k, recall_at_k
+def calculate_f1(precision, recall):
+    """
+    Calculate the F1 score given precision and recall values.
+
+    Parameters:
+    precision (float): The precision value.
+    recall (float): The recall value.
+
+    Returns:
+    float: The calculated F1 score.
+    """
+    if precision + recall == 0:
+        return 0.0
+
+    f1_score = 2 * (precision * recall) / (precision + recall)
+    return f1_score
