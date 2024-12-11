@@ -11,6 +11,22 @@ QueryID = Union[int, str]
 def precision_at_k(
     relevant_docs: Sequence[DocID], retrieved_docs: Sequence[DocID], k: int
 ) -> float:
+    """
+    Calculate the precision at rank k for a set of retrieved documents.
+
+    Precision at k is the proportion of relevant documents in the top-k \
+        retrieved documents.
+
+    Args:
+        relevant_docs (Sequence[DocID]): A sequence of document IDs that are relevant.
+        retrieved_docs (Sequence[DocID]): A sequence of document IDs that have \
+            been retrieved.
+        k (int): The rank position up to which precision is calculated.
+
+    Returns:
+        float: The precision at rank k, which is the number of relevant documents in \
+            the top-k retrieved documents divided by k.
+    """
     retrieved_k = retrieved_docs[:k]
     relevant_retrieved = len(set(relevant_docs).intersection(set(retrieved_k)))
     return relevant_retrieved / k
@@ -19,6 +35,20 @@ def precision_at_k(
 def recall_at_k(
     relevant_docs: Sequence[DocID], retrieved_docs: Sequence[DocID], k: int
 ) -> float:
+    """
+    Calculate the recall at rank k.
+
+    Recall at k is the proportion of relevant documents that are retrieved in
+    the top k results.
+
+    Args:
+        relevant_docs (Sequence[DocID]): A sequence of document IDs that are relevant.
+        retrieved_docs (Sequence[DocID]): A sequence of document IDs that are retrieved.
+        k (int): The rank position up to which to evaluate recall.
+
+    Returns:
+        float: The recall at rank k. If there are no relevant documents, returns 0.0.
+    """
     retrieved_k = retrieved_docs[:k]
     relevant_retrieved = len(set(relevant_docs).intersection(set(retrieved_k)))
     total_relevant = len(relevant_docs)
@@ -34,6 +64,24 @@ def evaluate_queries(
     database: VectorDatabase,
     **search_kwargs
 ) -> Dict[str, Dict[str, float]]:
+    """
+    Evaluate the performance of search queries using precision and recall at different \
+        k values.
+
+    Args:
+        queries (Dict[QueryID, str]): A dictionary mapping query IDs to query texts.
+        query_results (Mapping[QueryID, Sequence[DocID]]): A mapping of query IDs to \
+            sequences of relevant document IDs.
+        k_values (list[int]): A list of k values to evaluate precision and recall at.
+        database (VectorDatabase): An instance of the VectorDatabase to perform the \
+            search queries.
+        **search_kwargs: Additional keyword arguments to pass to the search function.
+
+    Returns:
+        Dict[str, Dict[str, float]]: A dictionary where each key is a k value and the \
+            value is another dictionary with keys "Precision" and "Recall" mapping to \
+                their respective average values.
+    """
 
     query_ids = list(queries.keys())
     query_texts = list(queries.values())
