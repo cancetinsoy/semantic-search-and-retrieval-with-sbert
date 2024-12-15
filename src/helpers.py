@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List, Union
 
 import numpy as np
@@ -15,11 +16,14 @@ def process_query_results(
     Processes the query results to extract relevant document IDs for each query.
 
     Args:
-        query_results (pd.DataFrame): DataFrame containing the query results with query IDs as the index.
-        doc_col_name (str, optional): The column name in the DataFrame that contains the document IDs. Defaults to "doc_number".
+        query_results (pd.DataFrame): DataFrame containing the query results with query\
+              IDs as the index.
+        doc_col_name (str, optional): The column name in the DataFrame that contains\
+              the document IDs. Defaults to "doc_number".
 
     Returns:
-        Dict[QueryID, List[DocID]]: A dictionary where the keys are query IDs and the values are lists of relevant document IDs.
+        Dict[QueryID, List[DocID]]: A dictionary where the keys are query IDs and the\
+              values are lists of relevant document IDs.
     """
     new_query_results = {}
     for q_id in query_results.index:
@@ -31,51 +35,26 @@ def process_query_results(
     return new_query_results
 
 
-def set_default_probas(n_neighbours: int) -> np.ndarray:
-    """
-    Calculate and return the default probability distribution for assigning neighbors
-    across different levels in a hierarchical structure.
+def documents_chunker(docs, tokenizer, max_length, stride):
+    for doc_id, file_path in docs.items():
+        with open(file_path, "r") as f:
+            text = f.read()
+            # cleaned = re.sub(r"[^a-zA-Z\s]", "", text)
+            cleaned = text
+            tokens = tokenizer.tokenize(cleaned, truncation=False, verbose=False)
 
-    Parameters:
-    n_neighbours (int): The number of neighbors to consider at each level.
-
-    Returns:
-    np.ndarray: An array of probabilities for each level, normalized to sum to 1.
-    """
-    m_L = 1 / np.log(n_neighbours)
-    nn = 0  # set nearest neighbors count = 0
-    cum_nneighbor_per_level = []
-    level = 0  # we start at level 0
-    assign_probas = []
-    while True:
-        # calculate probability for current level
-        proba = np.exp(-level / m_L) * (1 - np.exp(-1 / m_L))
-        # once we reach low prob threshold, we've created enough levels
-        if proba < 1e-9:
-            break
-        assign_probas.append(proba)
-        # neighbors is == M on every level except level 0 where == M*2
-        nn += n_neighbours * 2 if level == 0 else n_neighbours
-        cum_nneighbor_per_level.append(nn)
-        level += 1
-    return np.array(assign_probas) / np.sum(assign_probas)
+            # Yield segments with proper stride handling
+            for i in range(0, len(tokens) - stride, max_length - stride):
+                yield doc_id, re.sub(" ##", "", " ".join(tokens[i : i + max_length]))
 
 
-def assign_levels(n_neighbours: int, n_docs: int):
-    """
-    Assigns levels to a given number of documents based on the probabilities
-    derived from the number of neighbors.
+def get_top_k_unique(col_data: np.ndarray, k: int):
+    seen = set()
+    unique_vals = []
 
-    Parameters:
-    n_neighbours (int): The number of neighbors to consider for determining
-                        the assignment probabilities.
-    n_docs (int): The number of documents to assign levels to.
-
-    Returns:
-    numpy.ndarray: An array of assigned levels for each document.
-    """
-    assign_probas = set_default_probas(n_neighbours)
-    chosen_levels = np.random.choice(
-        np.arange(len(assign_probas)), size=n_docs, p=assign_probas
-    )
-    return chosen_levels
+    for val in col_data:
+        if val not in seen:
+            seen.add(val)
+            unique_vals.append(val)
+            if len(unique_vals) == k:
+                return unique_vals

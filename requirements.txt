@@ -1,4 +1,6 @@
-sentence-transformers
 numpy
-scipy
 pandas
+tqdm
+scikit-learn
+faiss
+sentence-transformers
